@@ -7,7 +7,7 @@ angular
     const scene = new THREE.Scene();
     let speech;
     let blinkingInterval = null;
-    let url = "final3.glb";
+    let url = "streamoji.glb";
 
     const corresponding = {
       A: "viseme_PP", // Open jaw, wide mouth
