@@ -7,8 +7,7 @@ angular
     const scene = new THREE.Scene();
     let speech;
     let blinkingInterval = null;
-    // let url ="brunette.glb";
-    let url = "av.glb";
+    let url = "final4.glb";
 
     const corresponding = {
       A: "viseme_PP", // Open jaw, wide mouth
@@ -1447,7 +1446,8 @@ angular
       0.1,
       1000
     );
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setPixelRatio(1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById("3d-avatar").appendChild(renderer.domElement);
 
@@ -1501,6 +1501,11 @@ angular
       );
     }
 
+    var currentCueIndex = 0;
+    
+    // Store active morph targets to optimize resets (using plain object for ES5 compat)
+    var activeMorphTargets = {};
+
     function updateLipSync(currentTime) {
       if (!model) {
         console.warn("Model not initialized yet.");
@@ -1515,47 +1520,67 @@ angular
         return;
       }
 
-      //   const morphTargetSmoothing = 0.19;
-
       const morphTargetSmoothing = 0.2;
-      Object.values(corresponding).forEach((viseme) => {
-        if (head.morphTargetDictionary[viseme] !== undefined) {
-          const index = head.morphTargetDictionary[viseme];
-          head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+
+      // Only iterate over active morph targets to zero them out instead of ~80 values
+      Object.keys(activeMorphTargets).forEach(function(indexStr) {
+        var index = parseInt(indexStr, 10);
+        head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
             head.morphTargetInfluences[index],
             0,
+            morphTargetSmoothing
+        );
+        teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+            teeth.morphTargetInfluences[index],
+            0,
+            morphTargetSmoothing
+        );
+        
+        // Remove from active tracking if it's very close to 0 to save CPU
+        if (head.morphTargetInfluences[index] < 0.01) {
+            head.morphTargetInfluences[index] = 0;
+            teeth.morphTargetInfluences[index] = 0;
+            delete activeMorphTargets[index];
+        }
+      });
+
+      // O(1) Cue lookup
+      let activeCue = null;
+      if (currentCueIndex > 0 && currentTime < lipsync.mouthCues[currentCueIndex - 1].start) {
+        currentCueIndex = 0; // audio restarted or rewinded
+      }
+
+      while (currentCueIndex < lipsync.mouthCues.length && currentTime > lipsync.mouthCues[currentCueIndex].end) {
+        currentCueIndex++;
+      }
+
+      if (currentCueIndex < lipsync.mouthCues.length && 
+          currentTime >= lipsync.mouthCues[currentCueIndex].start && 
+          currentTime <= lipsync.mouthCues[currentCueIndex].end) {
+        activeCue = lipsync.mouthCues[currentCueIndex];
+      }
+
+      if (activeCue) {
+        const target = corresponding[activeCue.value];
+        if (head.morphTargetDictionary[target] !== undefined) {
+          const index = head.morphTargetDictionary[target];
+          head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+            head.morphTargetInfluences[index],
+            1,
             morphTargetSmoothing
           );
           teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
             teeth.morphTargetInfluences[index],
-            0,
+            1,
             morphTargetSmoothing
           );
+          activeMorphTargets[index] = true;
         }
-      });
-
-      lipsync.mouthCues.forEach((cue) => {
-        if (currentTime >= cue.start && currentTime <= cue.end) {
-          const target = corresponding[cue.value];
-          if (head.morphTargetDictionary[target] !== undefined) {
-            //   console.log("viseme mapping : " +  cue.value + "  correspondig : " + corresponding[cue.value]);
-            const index = head.morphTargetDictionary[target];
-            head.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-              head.morphTargetInfluences[index],
-              1,
-              morphTargetSmoothing
-            );
-            teeth.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-              teeth.morphTargetInfluences[index],
-              1,
-              morphTargetSmoothing
-            );
-          }
-        }
-      });
+      }
     }
 
     function resetLipSync() {
+      currentCueIndex = 0;
       if (!model) {
         console.warn("Model not initialized yet.");
         return;
@@ -1627,19 +1652,26 @@ angular
       // This will keep track of the animation frame loop
       let animationFrameId;
 
+      let lastLipSyncTime = Date.now();
+      const lipSyncInterval = 1000 / 30; // 30 FPS for lipsync
+
       audio.onplay = function () {
         console.log("Audio playback started.");
         const startTime = audio.currentTime; // Track the start time of the audio
 
         function update() {
-          const currentTime = audio.currentTime - startTime; // Calculate elapsed time since start
-
-          // Call the lip-sync update function
-          updateLipSync(currentTime);
-
-          // If the audio is still playing, request the next frame
           if (!audio.paused && !audio.ended) {
-            animationFrameId = requestAnimationFrame(update); // Recursive call to update next frame
+            animationFrameId = requestAnimationFrame(update);
+          }
+
+          const now = Date.now();
+          const elapsed = now - lastLipSyncTime;
+
+          // Cap the lip-sync update loop to 30 times a second
+          if (elapsed > lipSyncInterval) {
+            lastLipSyncTime = now - (elapsed % lipSyncInterval);
+            const currentTime = audio.currentTime - startTime;
+            updateLipSync(currentTime);
           }
         }
 
@@ -1670,11 +1702,35 @@ angular
       $scope.speakQuestion(); // Play the audio file for the next question
     };
 
+    function disposeNode(node) {
+      if (node instanceof THREE.Mesh) {
+        if (node.geometry) {
+          node.geometry.dispose();
+        }
+        if (node.material) {
+          if (Array.isArray(node.material)) {
+            node.material.forEach(material => material.dispose());
+          } else {
+            node.material.dispose();
+          }
+        }
+      }
+    }
+
+    function disposeHierarchy(node, callback) {
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        const child = node.children[i];
+        disposeHierarchy(child, callback);
+        callback(child);
+      }
+    }
+
     $scope.changeAvatar = function (url) {
       // Remove the existing avatar from the scene if it exists
       if (model) {
         console.log("model changed");
         clearBlinking();
+        disposeHierarchy(model, disposeNode);
         scene.remove(model);
         model = null; // Clear the reference to the old avatar
       }
@@ -1682,54 +1738,22 @@ angular
       launchAvatar(url);
     };
 
-    function animate() {
-      requestAnimationFrame(animate);
-      if (mixer) mixer.update(clock.getDelta());
-      renderer.render(scene, camera);
-    }
-
-    function loadGLBModel(url) {
-      return new Promise((resolve, reject) => {
-        gltfLoader.load(
-          url,
-          (gltf) => resolve(gltf),
-          undefined,
-          (error) => reject(error)
-        );
-      });
-    }
-
-    const modelUrls = [
-      "brunette.glb",
-      "final.glb",
-      "final2.glb",
-      "final3.glb",
-      "final4.glb",
-    ];
-
-    function preloadModels(urls) {
-      return Promise.all(urls.map(loadGLBModel));
-    }
-
-    preloadModels(modelUrls)
-      .then((models) => {
-        console.log("All models preloaded.", models);
-        // Start rendering
-        animate();
-      })
-      .catch((error) => {
-        console.error("Error preloading models:", error.message || error);
-      });
-
-    const mixers = [];
+    let then = Date.now();
+    const renderInterval = 1000 / 30; // 30 FPS capped rendering
 
     function animate() {
       requestAnimationFrame(animate);
 
-      const delta = clock.getDelta();
-      mixers.forEach((mixer) => mixer.update(delta));
+      const now = Date.now();
+      const elapsed = now - then;
 
-      renderer.render(scene, camera);
+      if (elapsed > renderInterval) {
+        then = now - (elapsed % renderInterval);
+
+        const delta = clock.getDelta();
+        if (mixer) mixer.update(delta);
+        renderer.render(scene, camera);
+      }
     }
 
     $scope.$on("$destroy", function () {
@@ -1739,6 +1763,9 @@ angular
       }
       resetLipSync();
       clearBlinking();
+      if (model) {
+        disposeHierarchy(model, disposeNode);
+      }
       renderer.dispose();
     });
     window.addEventListener("resize", () => {
