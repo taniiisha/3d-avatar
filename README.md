@@ -1,1 +1,1 @@
-https://taniisha08.github.io/lip-sync/
+https://taniiisha.github.io/3d-avatar/
