@@ -1453,7 +1453,7 @@ angular
     // 1. Enforce correct color space and High Dynamic Range Tone Mapping
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 0.8; // Lowered from 1.0 to prevent brightness wash out
     
     // 2. Enable Shadows in the renderer
     renderer.shadowMap.enabled = true;
@@ -1474,11 +1474,11 @@ angular
       }
     );
 
-    // Adjust ambient light to be softer, letting the directional light create contrast
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Adjust ambient light to be much softer
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Lowered from 0.6
     
-    // 3. Configure the main light for dramatic shadows
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    // 3. Configure the main light for subtle shadows, not blinding
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7); // Lowered from 1.5
     directionalLight.position.set(2, 5, 5); // Angle the light
     
     // Enable shadows for the directional light
@@ -1490,8 +1490,8 @@ angular
     // Tweak to prevent "shadow acne"
     directionalLight.shadow.bias = -0.001;
     
-    // Add a soft fill light from the opposite side to balance
-    const fillLight = new THREE.DirectionalLight(0x90b0d0, 0.5);
+    // Add a very dark, subtle fill light from the opposite side
+    const fillLight = new THREE.DirectionalLight(0x90b0d0, 0.2); // Lowered from 0.5
     fillLight.position.set(-2, 1, -2);
     
     scene.add(ambientLight, directionalLight, fillLight);
