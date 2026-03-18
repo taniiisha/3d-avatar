@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html ng-app="InterviewBotApp">
+
+  <head><style></style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.2/angular.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+    <style>
+      body {
+        /* background-color: white; */
+        margin: 0;
+        padding: 0;
+        /* font-family: Arial, sans-serif; */
+        background-image: url('bg2.jpg');
+        /* Add your image path here */
+        background-size: cover;
+        /* Ensures the image covers the entire viewport */
+        background-repeat: no-repeat;
+        /* Prevents the image from repeating */
+        background-position: center;
+        /* Centers the image */
+      }
+    </style>
+  </head>
+
+<body ng-controller="InterviewController">
+  <div>
+    <center>
+      <div style="border: 2px solid white; color: white;padding: 12px;border-radius: 12px;">
+        <h3>Please Click Next to Proceed with the Interview.</h3>
+        <button  ng-disabled="isAudioPlaying" style="width: 120px; padding: 10px;border-radius: 15px;" ng-click="nextQuestion()">Next</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('av.glb')">Bot Avatar</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('brunette.glb')">Avatar1</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('final.glb')">Avatar2</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('final2.glb')">Avatar3</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('final3.glb')">Avatar4</button>
+        <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('final4.glb')">Avatar5</button>
+
+        <!-- <button style="width: 120px; padding: 10px;border-radius: 12px;" ng-click="changeAvatar('av.glb')">Bot Avatar</button> -->
+        
+      </div>
+
+      <div id="3d-avatar"></div>
+    </center>
+  
+  </div>
+  <script src="app.js"></script>
+
+</body>
+
+</html>
