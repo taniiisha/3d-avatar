@@ -244,8 +244,8 @@ angular
       camera.position.set(0, faceY, camDist);
       camera.lookAt(0, faceY, 0);
 
-      camera.near = camDist / 100;
-      camera.far  = camDist * 100;
+      camera.near = camDist / 50;
+      camera.far  = camDist * 50;
       camera.updateProjectionMatrix();
 
       console.log("📐 Bounding box size:", size);
