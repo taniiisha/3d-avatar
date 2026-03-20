@@ -224,19 +224,25 @@ angular
       box.getCenter(center);
 
       // Centre the model at origin
+      // After this: top of model = +size.y/2, bottom = -size.y/2
       model.position.sub(center);
 
-      // Push camera back so the whole avatar fits in view
-      const fovRad  = camera.fov * (Math.PI / 180);
-      const maxDim  = Math.max(size.x, size.y, size.z);
-      let   camDist = Math.abs(maxDim / 2 / Math.tan(fovRad / 2)) * 1.5;
+      // The face/head is near the TOP of the bounding box.
+      // For a half-body avatar in T-pose the arms spread the X width,
+      // pulling the geometric center DOWN into the torso.
+      // We want to look at the face, which is at roughly +40% of half-height.
+      // i.e. about 90% of the way from center to the top.
+      const faceY = size.y * 0.4; // world-space Y of the face after centering
 
-      camera.position.set(0, 0, camDist);
+      // Camera distance: base it on the Y height we want visible
+      // (show roughly top 60% of model — head + chest)
+      const fovRad     = camera.fov * (Math.PI / 180);
+      const visibleH   = size.y * 0.65; // how much vertical space to frame
+      let   camDist    = Math.abs((visibleH / 2) / Math.tan(fovRad / 2)) * 1.6;
 
-      // Tilt camera up slightly to frame face/chest for half-body
-      // (moves the view target to the upper 40% of the model)
-      camera.position.y = size.y * 0.1;
-      camera.lookAt(0, size.y * 0.1, 0);
+      // Position camera at face height, looking straight at the face
+      camera.position.set(0, faceY, camDist);
+      camera.lookAt(0, faceY, 0);
 
       camera.near = camDist / 100;
       camera.far  = camDist * 100;
@@ -244,6 +250,7 @@ angular
 
       console.log("📐 Bounding box size:", size);
       console.log("📷 Camera distance:", camDist.toFixed(3));
+      console.log("🎯 Looking at faceY:", faceY.toFixed(3));
 
       /* ── 2. Shadows & materials ────────────────── */
       model.traverse((child) => {
