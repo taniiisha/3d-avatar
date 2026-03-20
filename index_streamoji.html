@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html ng-app="StreamojiApp">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Streamoji Avatar · Interview Bot</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.2/angular.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #08090d;
+      --surface: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --accent: #c8f060;
+      --accent2: #60d4f0;
+      --text: #f0f2f5;
+      --muted: #6b7280;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overflow: hidden;
+    }
+
+    /* ── Canvas fills full screen ── */
+    #avatar-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    /* ── Vignette overlay ── */
+    #avatar-canvas::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 70% 70% at 50% 50%, transparent 40%, rgba(8,9,13,0.7) 100%);
+      pointer-events: none;
+    }
+
+    /* ── UI layer ── */
+    .ui-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 28px 32px;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    .brand-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .status-pill {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      background: rgba(200,240,96,0.08);
+      border: 1px solid rgba(200,240,96,0.2);
+      padding: 5px 12px;
+      border-radius: 20px;
+      letter-spacing: 0.03em;
+      transition: all 0.3s;
+    }
+
+    .status-pill.speaking {
+      background: rgba(200,240,96,0.14);
+      border-color: rgba(200,240,96,0.4);
+      box-shadow: 0 0 16px rgba(200,240,96,0.15);
+    }
+
+    /* ── Debug panel ── */
+    .debug-panel {
+      background: rgba(8,9,13,0.85);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-family: 'DM Mono', 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--accent2);
+      max-height: 120px;
+      overflow-y: auto;
+      line-height: 1.7;
+      display: none;
+      pointer-events: auto;
+      backdrop-filter: blur(12px);
+    }
+
+    .debug-panel.visible { display: block; }
+    .debug-panel .label { color: var(--muted); margin-right: 4px; }
+
+    /* ── Bottom controls ── */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      pointer-events: auto;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 11px 22px;
+      border-radius: 50px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.01em;
+    }
+
+    .btn-speak {
+      background: var(--accent);
+      color: #0a0b0f;
+      padding: 13px 32px;
+      font-size: 14px;
+      box-shadow: 0 4px 24px rgba(200,240,96,0.25);
+    }
+    .btn-speak:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(200,240,96,0.35); }
+    .btn-speak:active { transform: translateY(0); }
+    .btn-speak:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-speak.speaking { background: #f87171; box-shadow: 0 4px 24px rgba(248,113,113,0.25); }
+
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.07); }
+
+    .btn-debug {
+      background: rgba(96,212,240,0.06);
+      border: 1px solid rgba(96,212,240,0.15);
+      color: var(--accent2);
+      font-size: 11px;
+      padding: 7px 14px;
+    }
+    .btn-debug:hover { background: rgba(96,212,240,0.12); border-color: rgba(96,212,240,0.3); }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.5s ease;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .loader-ring {
+      width: 48px; height: 48px;
+      border: 2px solid rgba(255,255,255,0.06);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    /* Waveform bars while speaking */
+    .waveform {
+      display: none;
+      align-items: flex-end;
+      gap: 3px;
+      height: 20px;
+    }
+    .waveform.active { display: flex; }
+    .waveform span {
+      display: block;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: wave 0.8s ease-in-out infinite;
+    }
+    .waveform span:nth-child(1) { animation-delay: 0s;    height: 6px; }
+    .waveform span:nth-child(2) { animation-delay: 0.1s;  height: 14px; }
+    .waveform span:nth-child(3) { animation-delay: 0.2s;  height: 20px; }
+    .waveform span:nth-child(4) { animation-delay: 0.15s; height: 12px; }
+    .waveform span:nth-child(5) { animation-delay: 0.05s; height: 7px; }
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.4); }
+      50%       { transform: scaleY(1); }
+    }
+  </style>
+</head>
+<body ng-controller="StreamojiController">
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loader-ring"></div>
+    <div class="loader-text">Loading avatar…</div>
+  </div>
+
+  <!-- Three.js canvas container -->
+  <div id="avatar-canvas"></div>
+
+  <!-- UI Layer -->
+  <div class="ui-layer">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        <span class="brand-name">Interview Bot</span>
+      </div>
+      <div class="status-pill" id="statusPill" ng-class="{'speaking': isSpeaking}">
+        {{ isSpeaking ? 'Speaking…' : 'Ready' }}
+      </div>
+    </div>
+
+    <!-- Debug panel -->
+    <div class="debug-panel" id="debugPanel">
+      <div><span class="label">Meshes &amp; Morph Targets found in GLB:</span></div>
+      <div id="debugContent">Loading…</div>
+    </div>
+
+    <!-- Bottom controls -->
+    <div class="controls">
+      <div class="waveform" ng-class="{'active': isSpeaking}">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-speak" ng-class="{'speaking': isSpeaking}"
+                ng-disabled="!avatarReady || isSpeaking"
+                ng-click="speakQuestion()">
+          {{ isSpeaking ? '◼ Speaking…' : '▶ Speak' }}
+        </button>
+        <button class="btn btn-secondary" ng-click="reloadAvatar()">↺ Reload</button>
+        <button class="btn btn-debug" ng-click="toggleDebug()">
+          {{ showDebug ? 'Hide' : 'Show' }} Mesh Info
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app_streamoji.js"></script>
+</body>
+</html>
